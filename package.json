@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lxieyang/chrome-extension-boilerplate-react.git"
+    "url": "https://github.com/joserobleda/chrome-extension-boilerplate-react.git"
   },
   "scripts": {
     "build": "node utils/build.js",
@@ -14,12 +14,16 @@
   },
   "dependencies": {
     "@hot-loader/react-dom": "^17.0.1",
+    "@supabase/supabase-js": "^1.22.5",
     "@types/chrome": "0.0.132",
     "@types/react": "^17.0.2",
     "@types/react-dom": "^17.0.1",
+    "autoprefixer": "^9.8.6",
+    "html-entities": "^2.3.2",
     "react": "^17.0.1",
     "react-dom": "^17.0.1",
-    "react-hot-loader": "^4.13.0"
+    "react-hot-loader": "^4.13.0",
+    "tailwindcss": "^2.2.11"
   },
   "devDependencies": {
     "@babel/core": "^7.12.17",
@@ -44,6 +48,9 @@
     "html-loader": "^2.1.0",
     "html-webpack-plugin": "^5.2.0",
     "node-sass": "^4.14.1",
+    "postcss": "^8.3.6",
+    "postcss-cli": "^8.3.1",
+    "postcss-loader": "^6.1.1",
     "prettier": "^2.2.1",
     "sass-loader": "^11.0.1",
     "source-map-loader": "^2.0.1",
