@@ -50,7 +50,7 @@ export default class Popup extends React.Component {
 
   onProfiles(request) {
     const { lead, profiles } = request.payload;
-    console.log(profiles);
+    console.log(`${profiles.length} found`, profiles);
 
     const leads = this.state.leads.map(item => {
       if (lead.id !== item.id) return item;
@@ -116,7 +116,24 @@ export default class Popup extends React.Component {
 }
 
 class LeadCard extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.state = { lead: this.props.lead };
+  }
+
+  static getDerivedStateFromProps(props, state) {
+    return { lead: props.lead };
+  }
+
   connect(profile) {
+    const lead = { ...this.props.lead };
+    lead.profiles = lead.profiles.map(profileInList => {
+      if (profileInList.trackingId == profile.trackingId) profile.connecting = true;
+      return profile;
+    });
+
+    this.setState({ lead: lead });
     console.log('connect', this.props.lead, profile)
 
     chrome.runtime.sendMessage({
@@ -139,7 +156,7 @@ class LeadCard extends React.Component {
   }
 
   render() {
-    const lead = this.props.lead;
+    const lead = this.state.lead;
 
     return (
       <div key={lead.id} className="Card bg-white m-3 p-3 rounded-md">
@@ -151,7 +168,7 @@ class LeadCard extends React.Component {
             {lead.name || ''} {lead.org ? '(' + lead.org + ')' : ''}
           </div>
           <div className="col-span-2 flex justify-end items-center">
-            <LeadAction lead={this.props.lead} onFind={() => this.props.onSelected()} onDiscard={() => this.props.onDiscard()}></LeadAction>
+            <LeadAction lead={lead} onFind={() => this.props.onSelected()} onDiscard={() => this.props.onDiscard()}></LeadAction>
           </div>
         </div>
         {lead.profiles &&
@@ -161,6 +178,10 @@ class LeadCard extends React.Component {
                 <div>
                   {profile.picture &&
                     <img src={profile.picture.rootUrl + profile.picture.artifacts[1].fileIdentifyingUrlPathSegment} width="80px" height="80px" className="rounded-full ring ring-blue-400" />
+                  }
+
+                  {!profile.picture &&
+                    <img src="https://static-exp1.licdn.com/sc/h/1c5u578iilxfi4m4dvc4q810q" width="80px" height="80px" className="rounded-full ring ring-blue-400" />
                   }
                 </div>
                 <div className="col-span-4">
@@ -186,13 +207,22 @@ class LeadCard extends React.Component {
                     }
 
                     {profile.hit.distance.value != 'DISTANCE_1' && !profile.invite &&
-                      <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded" onClick={() => this.connect(profile)}>Connect</button>
+                      <div>
+                        {profile.connecting &&
+                          <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded">Connecting...</button>
+                        }
+                        {!profile.connecting &&
+                          <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded" onClick={() => this.connect(profile)}>Connect</button>
+                        }
+                      </div>
                     }
 
                   </div>
                 </div>
                 <div className="text-right">
-                  <img src={profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage.rootUrl + profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment} width="40px" height="40px" className="rounded-full ring ring-1 ring-blue-300 inline-block mr-1" />
+                  {profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage &&
+                    <img src={profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage.rootUrl + profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment} width="40px" height="40px" className="rounded-full ring ring-1 ring-blue-300 inline-block mr-1" />
+                  }
                 </div>
               </div>
             )}

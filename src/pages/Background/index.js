@@ -37,9 +37,10 @@ async function initialize() {
 
 // ---- popup message handling
 chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+  if (!client) await initialize();
+
   switch (request.action) {
     case 'open':
-      if (!client) await initialize();
       const user = await logIn();
       chrome.runtime.sendMessage({ action: "auth", payload: user });
 
@@ -73,7 +74,7 @@ function chromeAlarm(action, name) {
 }
 
 async function fetchData() {
-  console.log('fetchData', new Date(), client.auth.user());
+  console.log('fetchData', (new Date()).toISOString(), client.auth.user().email);
 
   await chromeAlarm("clear", "fetch");
 
@@ -90,18 +91,17 @@ async function fetchData() {
   console.log(`Found ${data.length} leads`);
 
   const queued = data.filter(lead => lead.status == 'queued');
-  chrome.action.setBadgeText({ text: `${queued.length}` });
+  chrome.action.setBadgeText({ text: `${queued.length || ''}` });
 
   chrome.runtime.sendMessage({ action: "leads", payload: data });
 
-  chrome.alarms.create("fetch", { delayInMinutes: 0.5 });
+  chrome.alarms.create("fetch", { delayInMinutes: 3 });
 }
 
 async function logIn() {
   const currentUser = client.auth.user();
 
   if (currentUser) {
-    // console.log('user already present', currentUser);
     return currentUser;
   }
 
@@ -131,6 +131,17 @@ async function onFindLead(lead) {
   }
 
   const company = await findOrg(org);
+  if (!company) {
+    chrome.runtime.sendMessage({
+      action: "profiles", payload: {
+        lead,
+        profiles: []
+      }
+    });
+
+    return;
+  }
+
   const profiles = await findProfilesInCompany(company, name);
 
   // chrome.runtime.sendMessage({ action: "profile", payload: user });
@@ -198,6 +209,10 @@ async function findOrg(orgName) {
   const objects = await getLinkedInObjects(`https://www.linkedin.com/search/results/companies/?keywords=${orgName}`);
 
   const collection = objects.filter(o => o.data && o.data.$type == 'com.linkedin.restli.common.CollectionResponse' && o.included && o.included.length)[0];
+
+  if (!collection) {
+    return null;
+  }
 
   const ids = collection.data.elements.reduce((carry, view) => {
     return carry.concat(view['*results'] || []);
