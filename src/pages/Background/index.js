@@ -82,6 +82,7 @@ async function fetchData() {
     .from('leads')
     .select()
     .filter('status', 'eq', 'queued')
+    .order('created_at', { ascending: true })
 
   if (error) {
     console.log(error);
@@ -91,9 +92,17 @@ async function fetchData() {
   console.log(`Found ${data.length} leads`);
 
   const queued = data.filter(lead => lead.status == 'queued');
+  const leads = data.map(lead => {
+    const providers = ['gmail', 'homail', 'yahoo'];
+    lead.isProviderAccount = providers.map(p => lead.email.indexOf('@' + p) !== -1).includes(true);
+
+    return lead;
+  })
+
+  chrome.action.setBadgeBackgroundColor({ color: '#CC0000' });
   chrome.action.setBadgeText({ text: `${queued.length || ''}` });
 
-  chrome.runtime.sendMessage({ action: "leads", payload: data });
+  chrome.runtime.sendMessage({ action: "leads", payload: leads });
 
   chrome.alarms.create("fetch", { delayInMinutes: 3 });
 }
@@ -121,6 +130,21 @@ function off() {
 // --------------- linkedin methods
 
 async function onFindLead(lead) {
+  if (lead.query) {
+    console.log('Find by query', lead);
+    const profiles = await findProfiles(lead.query);
+    console.log('FOUND', profiles);
+
+    chrome.runtime.sendMessage({
+      action: "profiles", payload: {
+        lead,
+        profiles
+      }
+    });
+
+    return;
+  }
+
   const email = lead.email;
   const org = lead.org || /@(\w+)/gi.exec(email)[1];;
   const domain = email.split('@')[1];
@@ -194,7 +218,7 @@ async function sendConnectionRequest(profile) {
       emberEntityName: "growth/invitation/norm-invitation",
       invitee: {
         'com.linkedin.voyager.growth.invitation.InviteeProfile': {
-          profileId: profile.hit.id
+          profileId: profile.id
         },
       },
       trackingId: profile.trackingId,
@@ -227,6 +251,38 @@ async function findOrg(orgName) {
   return models[0];
 }
 
+async function findProfiles(query) {
+  const objects = await getLinkedInObjects(`https://www.linkedin.com/search/results/people/?keywords=${query}`);
+  const collection = objects.filter(o => o.data && o.data.$type == 'com.linkedin.restli.common.CollectionResponse' && o.included && o.included.length)[0];
+
+  if (!collection) {
+    return [];
+  }
+
+  const invites = await fetchSentInvites()
+  const profiles = collection.included.filter(model => model.trackingUrn).map(model => {
+    const invite = invites.find(invite => invite.toMemberId === model.trackingId);
+    const url = model.navigationUrl.split('?')[0];
+    // model.entityUrn: "urn:li:fsd_entityResultViewModel:(urn:li:fsd_profile:ACoAAAQExq0B2nA56ykWxVkTbMjlrMgvK3rsQdg,SEARCH_SRP,DEFAULT)"
+    const id = model.entityUrn.match(/urn:li:fsd_profile:([\w\-]+)/)[1];
+
+    return {
+      ...model,
+      firstName: model.title.text,
+      occupation: model.primarySubtitle.text,
+      picture: model.image.attributes[0].detailDataUnion.nonEntityProfilePicture.vectorImage,
+      id,
+      distance: model.entityCustomTrackingInfo.memberDistance,
+      invite,
+      url,
+    };
+  })
+
+  console.log('find profiles', profiles);
+
+  return profiles;
+}
+
 async function findProfilesInCompany(company, name) {
   // const peopleSearchPage = `${company.navigationUrl}people/?keywords=${name}`;
   const url = `https://www.linkedin.com/voyager/api/search/hits?count=12&educationEndYear=List()&educationStartYear=List()&facetCurrentCompany=List(${company.id})&facetCurrentFunction=List()&facetFieldOfStudy=List()&facetGeoRegion=List()&facetNetwork=List()&facetSchool=List()&facetSkillExplicit=List()&keywords=List(${name})&maxFacetValues=15&origin=organization&q=people&start=0&supportedFacets=List(GEO_REGION,SCHOOL,CURRENT_COMPANY,CURRENT_FUNCTION,FIELD_OF_STUDY,SKILL_EXPLICIT,NETWORK)`;
@@ -235,17 +291,28 @@ async function findProfilesInCompany(company, name) {
   const invites = await fetchSentInvites()
 
   const models = response.data.elements.map(element => {
+    // element.entityUrn = "urn:li:fs_miniProfile:ACoAAAQExq0B2nA56ykWxVkTbMjlrMgvK3rsQdg"
+    const hit = element.hitInfo;
+    if (hit.$type == 'com.linkedin.voyager.search.Paywall') {
+      return null;
+    }
+
+    // trackingId = "1SIRPuYwRwye7TdI4wO1jg=="
     const model = response.included.find(model => model.trackingId == element.trackingId);
+
+    // id = "ACoAAAQExq0B2nA56ykWxVkTbMjlrMgvK3rsQdg"
     const invite = invites.find(invite => invite.toMemberId === element.hitInfo.id);
 
+    const url = `https://www.linkedin.com/in/${model.publicIdentifier}/`;
     return {
       ...model,
-      hit: element.hitInfo,
+      id: hit.id,
+      distance: hit.distance,
       invite,
-      url: `https://www.linkedin.com/in/${model.publicIdentifier}/`,
+      url,
       company,
     }
-  });
+  }).filter(Boolean);
 
   return models;
 }
