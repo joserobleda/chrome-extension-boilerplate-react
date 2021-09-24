@@ -50,3 +50,20 @@
     transform: rotate(360deg);
   }
 }
+
+input[type='text'] {
+  appearance: none;
+  background-color: #fff;
+  border-color: rgba(191, 219, 254, 1);
+  border-width: 1px;
+  border-radius: 0;
+  padding: .2rem .3rem;
+  font-size: 11px;
+  line-height: 1.13rem;
+}
+
+input[type='text']:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  border-color: #2563eb;
+}

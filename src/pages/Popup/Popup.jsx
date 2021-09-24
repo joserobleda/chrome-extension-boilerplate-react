@@ -1,7 +1,7 @@
 import React from 'react';
 // import { createClient } from '@supabase/supabase-js'
-import './Popup.css';
 import "./tailwind.css"
+import './Popup.css';
 import logo from '../../assets/img/logo.svg';
 
 // const NEXT_PUBLIC_SUPABASE_URL = "https://wdvnygveftqzaekowelk.supabase.co"
@@ -70,7 +70,6 @@ export default class Popup extends React.Component {
   }
 
   leadSearch(query, lead, i) {
-    console.log(`Searching ${query}`, lead, i);
     lead.query = query;
     let leads = [...this.state.leads];
     leads[i] = { ...lead, processing: true };
@@ -171,7 +170,13 @@ class LeadCard extends React.Component {
   }
 
   match(profile) {
-    console.log('match', this.props.lead, profile)
+    const lead = { ...this.props.lead };
+    lead.profiles = lead.profiles.map(profileInList => {
+      if (profileInList.trackingId == profile.trackingId) profile.matching = true;
+      return profile;
+    });
+
+    this.setState({ lead: lead });
 
     chrome.runtime.sendMessage({
       action: "match", payload: {
@@ -221,13 +226,20 @@ class LeadCard extends React.Component {
                       <a href={profile.url} className="text-lg mr-4 hover:underline hover:text-blue-600" target="_blank">{profile.firstName} {profile.lastName}</a>
                     </div>
                     <div>
-                      {profile.occupation}
+                      {profile.occupation} {profile.location ? ` · ${profile.location}` : ''}
                     </div>
                     <div className="mt-2">
                       {profile.invite &&
                         <div>
                           <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded">Pending</button>
-                          <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded ml-3" onClick={() => this.match(profile)}>Match</button>
+
+                          {!profile.matching &&
+                            <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded ml-3" onClick={() => this.match(profile)}>Match</button>
+                          }
+
+                          {profile.matching &&
+                            <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded ml-3">Matching...</button>
+                          }
                         </div>
                       }
 
@@ -252,8 +264,8 @@ class LeadCard extends React.Component {
                     </div>
                   </div>
                   <div className="text-right">
-                    {profile.company && profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage &&
-                      <img src={profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage.rootUrl + profile.company.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment} width="40px" height="40px" className="rounded-full ring ring-1 ring-blue-300 inline-block mr-1" />
+                    {profile.company && profile.company.vectorImage &&
+                      <img src={profile.company.vectorImage.rootUrl + profile.company.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment} width="40px" height="40px" className="rounded-full ring ring-1 ring-blue-300 inline-block mr-1" />
                     }
                   </div>
                 </div>
@@ -262,7 +274,7 @@ class LeadCard extends React.Component {
             <form onSubmit={e => { e.preventDefault(); this.props.onSearch(this.state.search) }} className="text-center mt-4">
               Search manually: &nbsp;
               <input type="text" value={this.state.search} onChange={(e) => this.handleSearchChange(e)} />
-              <button type="submit" className="bg-blue-200 hover:bg-blue-300 text-white font-bold py-1 px-4 rounded" >🔎</button>
+              <button type="submit" className="bg-blue-200 hover:bg-blue-300 text-white font-bold py-1 px-4 rounded -ml-1" >🔎</button>
             </form>
           </div>
         }
@@ -280,6 +292,8 @@ class LeadAction extends React.Component {
   }
 
   getDefaultSearchValue() {
+    if (this.props.lead.name) return this.props.lead.name;
+
     const email = this.props.lead.email;
     const username = email.substring(0, email.indexOf('@'));
 
@@ -305,9 +319,9 @@ class LeadAction extends React.Component {
     }
 
     if (this.props.lead.isProviderAccount) {
-      return (<form onSubmit={e => { e.preventDefault(); this.props.onSearch(this.state.search) }}>
+      return (<form onSubmit={e => { e.preventDefault(); this.props.onSearch(this.state.search) }} className="flex items-center">
         <input type="text" value={this.state.search} onChange={(e) => this.handleSearchChange(e)} />
-        <button type="submit" className="bg-blue-200 hover:bg-blue-300 text-white font-bold py-1 px-4 rounded" >🔎</button>
+        <button type="submit" className="bg-blue-200 hover:bg-blue-300 text-white font-bold py-1 px-4 rounded -ml-1" >🔎</button>
       </form>)
     }
 
