@@ -131,9 +131,8 @@ function off() {
 
 async function onFindLead(lead) {
   if (lead.query) {
-    console.log('Find by query', lead);
     const profiles = await findProfiles(lead.query);
-    console.log('FOUND', profiles);
+    console.log(`Find by query ${lead.query}`, profiles);
 
     chrome.runtime.sendMessage({
       action: "profiles", payload: {
@@ -191,11 +190,13 @@ async function onDiscard(request) {
 async function onMatch(request) {
   const { lead, profile } = request.payload;
 
+  const companyUrl = profile.company ? profile.company.navigationUrl : '';
+
   const { data, error } = await client
     .from('leads')
     .update({
       profile_url: profile.url,
-      company_url: profile.company.navigationUrl,
+      company_url: companyUrl,
       status: 'match',
     })
     .match({ id: lead.id });
@@ -245,6 +246,9 @@ async function findOrg(orgName) {
   const models = ids.map(id => {
     let model = collection.included.filter(model => model.trackingUrn == `urn:li:company:${id}`)[0]
     model.id = id;
+
+    model.vectorImage = model.image.attributes[0].detailDataUnion.nonEntityCompanyLogo.vectorImage;
+
     return model;
   });
 
@@ -261,24 +265,25 @@ async function findProfiles(query) {
 
   const invites = await fetchSentInvites()
   const profiles = collection.included.filter(model => model.trackingUrn).map(model => {
-    const invite = invites.find(invite => invite.toMemberId === model.trackingId);
     const url = model.navigationUrl.split('?')[0];
     // model.entityUrn: "urn:li:fsd_entityResultViewModel:(urn:li:fsd_profile:ACoAAAQExq0B2nA56ykWxVkTbMjlrMgvK3rsQdg,SEARCH_SRP,DEFAULT)"
     const id = model.entityUrn.match(/urn:li:fsd_profile:([\w\-]+)/)[1];
+    const invite = invites.find(invite => invite.toMemberId === id);
 
     return {
       ...model,
       firstName: model.title.text,
       occupation: model.primarySubtitle.text,
+      location: model.secondarySubtitle.text,
       picture: model.image.attributes[0].detailDataUnion.nonEntityProfilePicture.vectorImage,
       id,
-      distance: model.entityCustomTrackingInfo.memberDistance,
+      distance: {
+        value: model.entityCustomTrackingInfo.memberDistance,
+      },
       invite,
       url,
     };
   })
-
-  console.log('find profiles', profiles);
 
   return profiles;
 }
@@ -299,6 +304,9 @@ async function findProfilesInCompany(company, name) {
 
     // trackingId = "1SIRPuYwRwye7TdI4wO1jg=="
     const model = response.included.find(model => model.trackingId == element.trackingId);
+    if (!model) {
+      return null;
+    }
 
     // id = "ACoAAAQExq0B2nA56ykWxVkTbMjlrMgvK3rsQdg"
     const invite = invites.find(invite => invite.toMemberId === element.hitInfo.id);
