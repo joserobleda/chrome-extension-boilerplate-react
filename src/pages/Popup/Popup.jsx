@@ -10,7 +10,7 @@ import logo from '../../assets/img/logo.svg';
 
 export default class Popup extends React.Component {
   state = {
-    user: null,
+    user: undefined,
     leads: [],
   };
 
@@ -20,7 +20,7 @@ export default class Popup extends React.Component {
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       switch (request.action) {
-        case 'auth':
+        case 'signin':
           const user = request.payload;
 
           this.setState({ user });
@@ -91,7 +91,25 @@ export default class Popup extends React.Component {
     chrome.runtime.sendMessage({ action: "discard", payload: lead });
   }
 
+  signInFlow() {
+    chrome.runtime.sendMessage({ action: "signinflow" });
+  }
+
   render() {
+    // Loaded but no user
+    if (this.state.user == null) {
+      return (
+        <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
+          <header className="p-6 shadow-lg bg-white text-base font-bold">
+            <p>&nbsp;</p>
+          </header>
+          <section className="flex items-center	justify-center flex-grow">
+            <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded ml-3" onClick={() => this.signInFlow()}>Sign in</button>
+          </section>
+        </div>
+      );
+    }
+
     if (!this.state.user) {
       return (
         <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
@@ -100,6 +118,25 @@ export default class Popup extends React.Component {
           </header>
           <section className="flex items-center	justify-center flex-grow">
             <img className="h-12 w-12 App-logo" src={logo} alt="loading" />
+          </section>
+        </div>
+      );
+    }
+
+    if (this.state.user !== undefined && this.state.leads.length == 0) {
+      return (
+        <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
+          <header className="p-6 shadow-lg bg-white text-base font-bold">
+            <div className="flex text-gray justify-between">
+              {this.state.user.email}
+            </div>
+          </header>
+          <section className="flex items-center	justify-center flex-grow">
+            <p className="text-5xl font-extrabold text-green-600 text-center">
+              You're all set
+              <br /><br />
+              😎
+            </p>
           </section>
         </div>
       );
@@ -118,9 +155,9 @@ export default class Popup extends React.Component {
     return (
       <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
         <header className="p-6 shadow-lg bg-white text-base font-bold">
-          <p>
-            Welcome {this.state.user.email}
-          </p>
+          <div className="flex justify-between">
+            {this.state.user.email}
+          </div>
         </header>
         <section>
           {leadList}

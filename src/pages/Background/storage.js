@@ -3,6 +3,7 @@ self.window = {};
 
 let VALUE = undefined;
 let STORAGE_KEY = 'supabase.auth.token';
+const chromeStorage = chrome.storage.local;
 
 class ChromeLocalStorage {
   getItem(key) {
@@ -12,13 +13,13 @@ class ChromeLocalStorage {
   }
 
   setItem(key, value) {
-    chrome.storage.local.set({ [key]: value }, function () {
+    chromeStorage.set({ [key]: value }, function () {
       VALUE = value;
     });
   }
 
   removeItem(key) {
-    chrome.storage.local.remove(key, function () {
+    chromeStorage.remove(key, function () {
       VALUE = undefined;
     });
   }
@@ -27,8 +28,19 @@ class ChromeLocalStorage {
 // we need sync return
 ChromeLocalStorage.preLoad = function () {
   return new Promise((resolve, reject) => {
-    chrome.storage.local.get(STORAGE_KEY, function (results) {
+    chromeStorage.get(STORAGE_KEY, function (results) {
       VALUE = results[STORAGE_KEY];
+
+      resolve();
+    });
+  })
+}
+
+ChromeLocalStorage.setToken = function (token) {
+  if (typeof token !== 'string') token = JSON.stringify(token);
+  return new Promise((resolve, reject) => {
+    chromeStorage.set({ [STORAGE_KEY]: token }, function () {
+      VALUE = token;
 
       resolve();
     });

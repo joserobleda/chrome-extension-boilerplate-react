@@ -11,6 +11,20 @@
   "icons": {
     "128": "icon-128.png"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://retargetin.vercel.app/*",
+        "http://localhost:3000/*"
+      ],
+      "js": [
+        "contentScript.bundle.js"
+      ],
+      "css": [
+        "content.styles.css"
+      ]
+    }
+  ],
   "web_accessible_resources": [
     {
       "resources": [
@@ -24,7 +38,8 @@
   "permissions": [
     "cookies",
     "storage",
-    "alarms"
+    "alarms",
+    "tabs"
   ],
   "host_permissions": [
     "*://*.linkedin.com/*",

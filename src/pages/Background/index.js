@@ -1,5 +1,6 @@
 console.log('Service worker executed');
 
+const WEB = 'https://retargetin.vercel.app';
 import './xmlhttprequest';
 import { createClient } from '@supabase/supabase-js';
 import { decode } from 'html-entities';
@@ -9,6 +10,7 @@ const NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJy
 let client;
 
 chrome.runtime.onInstalled.addListener(() => {
+  console.log('onInstalled');
   initialize();
 });
 
@@ -28,8 +30,16 @@ async function initialize() {
     detectSessionInUrl: false,
   });
 
-  const currentUser = client.auth.user();
-  if (!currentUser) return off();
+  client.auth.onAuthStateChange((event, session) => {
+    console.log(event, session)
+  })
+
+  /// ###### FORCE LOGUTS
+  // await ChromeLocalStorage.setToken('');
+  // await client.auth.signOut();
+
+  const session = client.auth.session();
+  if (!session) return off();
 
   chrome.action.setBadgeBackgroundColor({ color: '#CC0000' });
   fetchData();
@@ -40,13 +50,34 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   if (!client) await initialize();
 
   switch (request.action) {
-    case 'open':
-      const user = await logIn();
-      chrome.runtime.sendMessage({ action: "auth", payload: user });
+    case 'auth':
+      console.log('auth received');
+      // already signed in
+      if (client.auth.session()) {
+        console.log('session already set');
+        return;
+      }
 
+      await ChromeLocalStorage.setToken(request.payload);
+      client.auth._recoverSession();
+
+      const auser = client.auth.user();
       fetchData();
-      break;
 
+      chrome.runtime.sendMessage({ action: "signin", payload: auser });
+      break;
+    case 'signinflow':
+      const signInUrl = `${WEB}/signin?next=/auth-extension`;
+      chrome.tabs.create({ url: signInUrl, active: true }, function (tab) {
+        console.log(tab);
+      });
+      break;
+    case 'open':
+      const currentUser = client.auth.user();
+      chrome.runtime.sendMessage({ action: "signin", payload: currentUser });
+
+      if (currentUser) fetchData();
+      break;
     case 'findLead':
       onFindLead(request.payload);
       break;
@@ -93,7 +124,7 @@ async function fetchData() {
 
   const queued = data.filter(lead => lead.status == 'queued');
   const leads = data.map(lead => {
-    const providers = ['gmail', 'homail', 'yahoo'];
+    const providers = ['gmail', 'hotmail', 'yahoo'];
     lead.isProviderAccount = providers.map(p => lead.email.indexOf('@' + p) !== -1).includes(true);
 
     return lead;
@@ -109,7 +140,7 @@ async function fetchData() {
 
 async function logIn() {
   const currentUser = client.auth.user();
-
+  return currentUser;
   if (currentUser) {
     return currentUser;
   }
