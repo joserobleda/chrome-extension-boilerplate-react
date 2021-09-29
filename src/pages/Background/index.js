@@ -34,10 +34,6 @@ async function initialize() {
     console.log(event, session)
   })
 
-  /// ###### FORCE LOGUTS
-  // await ChromeLocalStorage.setToken('');
-  // await client.auth.signOut();
-
   const session = client.auth.session();
   if (!session) return off();
 
@@ -50,20 +46,29 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   if (!client) await initialize();
 
   switch (request.action) {
+    case 'logout':
+      await ChromeLocalStorage.setToken('');
+      await client.auth.signOut();
+
+      chrome.runtime.sendMessage({ action: "signin", payload: null });
+      off();
+      break;
     case 'auth':
       console.log('auth received');
       // already signed in
-      if (client.auth.session()) {
-        console.log('session already set');
-        return;
+      if (client.auth.user()) {
+        return console.log('session already set');
       }
 
       await ChromeLocalStorage.setToken(request.payload);
       client.auth._recoverSession();
-
       const auser = client.auth.user();
-      fetchData();
 
+      if (!auser) {
+        return console.log('invalid auth');
+      }
+
+      fetchData();
       chrome.runtime.sendMessage({ action: "signin", payload: auser });
       break;
     case 'signinflow':
@@ -105,7 +110,13 @@ function chromeAlarm(action, name) {
 }
 
 async function fetchData() {
-  console.log('fetchData', (new Date()).toISOString(), client.auth.user().email);
+  const user = client.auth.user();
+  if (!user) {
+    console.log("Session lost");
+    return;
+  }
+
+  console.log('fetchData', (new Date()).toISOString(), user.email);
 
   await chromeAlarm("clear", "fetch");
 

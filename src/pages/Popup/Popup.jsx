@@ -11,6 +11,7 @@ import logo from '../../assets/img/logo.svg';
 export default class Popup extends React.Component {
   state = {
     user: undefined,
+    ready: false,
     leads: [],
   };
 
@@ -37,7 +38,7 @@ export default class Popup extends React.Component {
             };
           })
 
-          this.setState({ leads });
+          this.setState({ ready: true, leads });
           break;
         case 'profiles':
           this.onProfiles(request)
@@ -95,6 +96,10 @@ export default class Popup extends React.Component {
     chrome.runtime.sendMessage({ action: "signinflow" });
   }
 
+  logOut() {
+    chrome.runtime.sendMessage({ action: "logout" });
+  }
+
   render() {
     // Loaded but no user
     if (this.state.user == null) {
@@ -123,12 +128,15 @@ export default class Popup extends React.Component {
       );
     }
 
-    if (this.state.user !== undefined && this.state.leads.length == 0) {
+    if (this.state.ready === true && this.state.leads.length == 0) {
       return (
         <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
           <header className="p-6 shadow-lg bg-white text-base font-bold">
             <div className="flex text-gray justify-between">
-              {this.state.user.email}
+              <div className="flex justify-between items-center">
+                <span className="p-6 text-base font-bold">{this.state.user.email}</span>
+                <a href="#" className="p-6" onClick={() => this.logOut()}>Logout</a>
+              </div>
             </div>
           </header>
           <section className="flex items-center	justify-center flex-grow">
@@ -154,9 +162,10 @@ export default class Popup extends React.Component {
 
     return (
       <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
-        <header className="p-6 shadow-lg bg-white text-base font-bold">
-          <div className="flex justify-between">
-            {this.state.user.email}
+        <header className="shadow-lg bg-white">
+          <div className="flex justify-between items-center">
+            <span className="p-6 text-base font-bold">{this.state.user.email}</span>
+            <a href="#" className="p-6" onClick={() => this.logOut()}>Logout</a>
           </div>
         </header>
         <section>
