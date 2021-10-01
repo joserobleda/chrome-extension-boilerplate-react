@@ -14,16 +14,9 @@ chrome.runtime.onInstalled.addListener(() => {
   initialize();
 });
 
-chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name != 'fetch') return;
-
-  if (client) return fetchData();
-  initialize();
-});
-
 async function initialize() {
   await ChromeLocalStorage.preLoad();
-  console.log('Initializing client');
+  console.log('initializing client');
 
   client = createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     localStorage: new ChromeLocalStorage(),
@@ -35,9 +28,8 @@ async function initialize() {
   })
 
   const session = client.auth.session();
-  if (!session) return off();
+  if (!session) return off('!');
 
-  chrome.action.setBadgeBackgroundColor({ color: '#CC0000' });
   fetchData();
 }
 
@@ -51,7 +43,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       await client.auth.signOut();
 
       chrome.runtime.sendMessage({ action: "signin", payload: null });
-      off();
+      off('OFF');
       break;
     case 'auth':
       console.log('auth received');
@@ -110,13 +102,20 @@ function chromeAlarm(action, name) {
 }
 
 async function fetchData() {
-  const user = client.auth.user();
-  if (!user) {
-    console.log("Session lost");
-    return;
+  if (client && !client.auth.user()) {
+    console.log('trying to recover session...')
+    await client.auth._recoverAndRefresh();
   }
 
-  console.log('fetchData', (new Date()).toISOString(), user.email);
+  if (!client) {
+    console.log('recovering client...')
+    await initialize();
+  }
+
+  const user = client.auth.user();
+  if (!user) return console.log("Session lost");
+
+  console.log('fetching data', (new Date()).toISOString(), user.email);
 
   await chromeAlarm("clear", "fetch");
 
@@ -129,6 +128,12 @@ async function fetchData() {
   if (error) {
     console.log(error);
     return
+  }
+
+  chrome.alarms.create("fetch", { delayInMinutes: 1 });
+
+  if (!data) {
+    return console.log({ data }, { error });
   }
 
   console.log(`Found ${data.length} leads`);
@@ -145,9 +150,12 @@ async function fetchData() {
   chrome.action.setBadgeText({ text: `${queued.length || ''}` });
 
   chrome.runtime.sendMessage({ action: "leads", payload: leads });
-
-  chrome.alarms.create("fetch", { delayInMinutes: 3 });
 }
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name != 'fetch') return;
+  fetchData();
+});
 
 async function logIn() {
   const currentUser = client.auth.user();
@@ -164,9 +172,9 @@ async function logIn() {
   return user;
 }
 
-function off() {
+function off(text) {
   chrome.action.setBadgeBackgroundColor({ color: '#CCCCCC' });
-  chrome.action.setBadgeText({ text: `OFF` });
+  chrome.action.setBadgeText({ text });
 };
 
 // --------------- linkedin methods

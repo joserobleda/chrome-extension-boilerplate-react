@@ -131,12 +131,10 @@ export default class Popup extends React.Component {
     if (this.state.ready === true && this.state.leads.length == 0) {
       return (
         <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
-          <header className="p-6 shadow-lg bg-white text-base font-bold">
-            <div className="flex text-gray justify-between">
-              <div className="flex justify-between items-center">
-                <span className="p-6 text-base font-bold">{this.state.user.email}</span>
-                <a href="#" className="p-6" onClick={() => this.logOut()}>Logout</a>
-              </div>
+          <header className="shadow-lg bg-white">
+            <div className="flex justify-between items-center">
+              <span className="p-6 text-base font-bold">{this.state.user.email}</span>
+              <a href="#" className="p-6" onClick={() => this.logOut()}>Logout</a>
             </div>
           </header>
           <section className="flex items-center	justify-center flex-grow">
