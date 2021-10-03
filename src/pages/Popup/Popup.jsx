@@ -236,10 +236,9 @@ class LeadCard extends React.Component {
     return (
       <div key={lead.id} className="Card bg-white m-3 p-3 rounded-md">
         <div className="grid grid-cols-5 gap-4 h-8">
-          <div className="col-span-2 flex items-center">
+          <div className="col-span-3 flex items-center">
             {lead.email}
-          </div>
-          <div className="flex items-center">
+            <br />
             {lead.name || ''} {lead.org ? '(' + lead.org + ')' : ''}
           </div>
           <div className="col-span-2 flex justify-end items-center">
