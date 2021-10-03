@@ -1,4 +1,4 @@
-console.log('Service worker executed');
+console.log('Service worker executed', (new Date()).toISOString());
 
 const WEB = 'https://retargetin.vercel.app';
 import './xmlhttprequest';
@@ -16,7 +16,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 async function initialize() {
   await ChromeLocalStorage.preLoad();
-  console.log('initializing client');
+  console.log('initializing client', (new Date()).toISOString());
 
   client = createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     localStorage: new ChromeLocalStorage(),
@@ -26,6 +26,11 @@ async function initialize() {
   client.auth.onAuthStateChange((event, session) => {
     console.log(event, session)
   })
+
+  if (!client.auth.user()) {
+    console.log('trying to recover session...')
+    await client.auth._recoverAndRefresh();
+  }
 
   const session = client.auth.session();
   if (!session) return off('!');
@@ -64,7 +69,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       chrome.runtime.sendMessage({ action: "signin", payload: auser });
       break;
     case 'signinflow':
-      const signInUrl = `${WEB}/signin?next=/auth-extension`;
+      const signInUrl = `${WEB}/signin?pwd=true&next=/auth-extension`;
       chrome.tabs.create({ url: signInUrl, active: true }, function (tab) {
         console.log(tab);
       });
