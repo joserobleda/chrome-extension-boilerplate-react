@@ -1,6 +1,6 @@
-console.log('Service worker executed', (new Date()).toISOString());
+console.log('service worker executed', (new Date()).toISOString());
 
-const WEB = 'https://retargetin.vercel.app';
+const WEB = 'https://nurturein.vercel.app';
 import './xmlhttprequest';
 import { createClient } from '@supabase/supabase-js';
 import { decode } from 'html-entities';
@@ -9,40 +9,67 @@ const NEXT_PUBLIC_SUPABASE_URL = "https://wdvnygveftqzaekowelk.supabase.co"
 const NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYzMDc2ODQ2MCwiZXhwIjoxOTQ2MzQ0NDYwfQ.FcYHzQjhQK9HZrpX6asv0bdcMBcuKtcLUBBFs19-3d8"
 let client;
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('onInstalled');
-  initialize();
-});
-
 async function initialize() {
   await ChromeLocalStorage.preLoad();
   console.log('initializing client', (new Date()).toISOString());
 
+  const localStorage = new ChromeLocalStorage();
   client = createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    localStorage: new ChromeLocalStorage(),
+    localStorage,
     detectSessionInUrl: false,
   });
 
   client.auth.onAuthStateChange((event, session) => {
     console.log(event, session)
-  })
+
+    if ('SIGNED_IN' == event) {
+      fetchLinkedInProfileInfo(localStorage);
+    }
+  });
 
   if (!client.auth.user()) {
-    console.log('trying to recover session...')
+    console.log('trying to recover session on initialize...')
     await client.auth._recoverAndRefresh();
   }
 
   const session = client.auth.session();
   if (!session) return off('!');
 
-  fetchData();
+  chrome.alarms.get('fetch', a => {
+    if (a) return;
+
+    chrome.alarms.create('fetch', { periodInMinutes: 1 });
+    console.log(`alarm setup`, (new Date()).toISOString());
+  });
+
+  fetchData(`initialize`);
+}
+
+async function fetchLinkedInProfileInfo(localStorage) {
+  console.log('✅ FETCH LINKEDIN INFO');
+
+  const objects = await getLinkedInObjects(`https://www.linkedin.com/`);
+
+  const collection = objects.filter(o => o.data && o.data.$type == 'com.linkedin.voyager.dash.feed.nav.GlobalNav' && o.included && o.included.length)[0];
+
+  if (!collection) {
+    return null;
+  }
+
+  const profileInfo = collection.included[0];
+  console.log(profileInfo);
+  chrome.runtime.sendMessage({ action: "linkedInProfile", payload: profileInfo });
 }
 
 // ---- popup message handling
 chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   if (!client) await initialize();
+  console.log(`worker message "${request.action}"`)
 
   switch (request.action) {
+    case 'wakeup':
+      // wake up method for start the service worker
+      break;
     case 'logout':
       await ChromeLocalStorage.setToken('');
       await client.auth.signOut();
@@ -66,6 +93,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       }
 
       fetchData();
+      console.log("user", auser);
       chrome.runtime.sendMessage({ action: "signin", payload: auser });
       break;
     case 'signinflow':
@@ -78,7 +106,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       const currentUser = client.auth.user();
       chrome.runtime.sendMessage({ action: "signin", payload: currentUser });
 
-      if (currentUser) fetchData();
+      if (currentUser) fetchData(`open`);
       break;
     case 'findLead':
       onFindLead(request.payload);
@@ -106,9 +134,9 @@ function chromeAlarm(action, name) {
   });
 }
 
-async function fetchData() {
+async function fetchData(src = '') {
   if (client && !client.auth.user()) {
-    console.log('trying to recover session...')
+    console.log('trying to recover session on fetch data...')
     await client.auth._recoverAndRefresh();
   }
 
@@ -118,9 +146,9 @@ async function fetchData() {
   }
 
   const user = client.auth.user();
-  if (!user) return console.log("Session lost");
+  if (!user) return console.log("session lost");
 
-  console.log('fetching data', (new Date()).toISOString(), user.email);
+  console.log(`fetching data ${src}`, (new Date()).toISOString(), user.email);
 
   await chromeAlarm("clear", "fetch");
 
@@ -134,8 +162,6 @@ async function fetchData() {
     console.log(error);
     return
   }
-
-  chrome.alarms.create("fetch", { delayInMinutes: 1 });
 
   if (!data) {
     return console.log({ data }, { error });
@@ -154,28 +180,28 @@ async function fetchData() {
   chrome.action.setBadgeBackgroundColor({ color: '#CC0000' });
   chrome.action.setBadgeText({ text: `${queued.length || ''}` });
 
-  chrome.runtime.sendMessage({ action: "leads", payload: leads });
+  chrome.runtime.sendMessage({ action: "leads", payload: leads, src });
 }
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name != 'fetch') return;
-  fetchData();
+  fetchData(`alarm`);
 });
 
-async function logIn() {
-  const currentUser = client.auth.user();
-  return currentUser;
-  if (currentUser) {
-    return currentUser;
-  }
+// async function logIn() {
+//   const currentUser = client.auth.user();
+//   return currentUser;
+//   if (currentUser) {
+//     return currentUser;
+//   }
 
-  const { user, session, error } = await client.auth.signIn({
-    email: 'joserobleda@gmail.com',
-    password: '123456',
-  })
+//   const { user, session, error } = await client.auth.signIn({
+//     email: 'joserobleda@gmail.com',
+//     password: '123456',
+//   })
 
-  return user;
-}
+//   return user;
+// }
 
 function off(text) {
   chrome.action.setBadgeBackgroundColor({ color: '#CCCCCC' });
@@ -185,6 +211,7 @@ function off(text) {
 // --------------- linkedin methods
 
 async function onFindLead(lead) {
+  console.log(`Searching contacts`, lead);
   if (lead.query) {
     const profiles = await findProfiles(lead.query);
     console.log(`Find by query ${lead.query}`, profiles);
@@ -210,6 +237,7 @@ async function onFindLead(lead) {
 
   const company = await findOrg(org);
   if (!company) {
+    console.log(`Can't find org ${org}`);
     chrome.runtime.sendMessage({
       action: "profiles", payload: {
         lead,
@@ -220,15 +248,26 @@ async function onFindLead(lead) {
     return;
   }
 
-  const profiles = await findProfilesInCompany(company, name);
+  try {
+    const profiles = await findProfilesInCompany(company, name);
 
-  // chrome.runtime.sendMessage({ action: "profile", payload: user });
-  chrome.runtime.sendMessage({
-    action: "profiles", payload: {
-      lead,
-      profiles
-    }
-  });
+    chrome.runtime.sendMessage({
+      action: "profiles", payload: {
+        lead,
+        profiles
+      }
+    });
+
+  } catch (err) {
+    console.log(`can't search by company, trying by query`);
+    chrome.runtime.sendMessage({
+      action: "error", payload: {
+        type: err
+      }
+    });
+
+    return onFindLead({ ...lead, query: `${name} ${org}` });
+  }
 }
 
 async function onDiscard(request) {
@@ -325,11 +364,14 @@ async function findProfiles(query) {
     const id = model.entityUrn.match(/urn:li:fsd_profile:([\w\-]+)/)[1];
     const invite = invites.find(invite => invite.toMemberId === id);
 
+    const current = (model.summary?.text || '').replace('Current: ', '');
+    const occupation = (current + ' ' + model.primarySubtitle.text).trim();
+
     return {
       ...model,
       firstName: model.title.text,
-      occupation: model.primarySubtitle.text,
-      location: model.secondarySubtitle.text,
+      occupation,
+      location: model.secondarySubtitle?.text,
       picture: model.image.attributes[0].detailDataUnion.nonEntityProfilePicture.vectorImage,
       id,
       distance: {
@@ -350,11 +392,17 @@ async function findProfilesInCompany(company, name) {
   const response = await stream.json();
   const invites = await fetchSentInvites()
 
+  if (!response.data) {
+    console.log(response.data);
+    return [];
+  }
+
+  console.log(response.data);
   const models = response.data.elements.map(element => {
     // element.entityUrn = "urn:li:fs_miniProfile:ACoAAAQExq0B2nA56ykWxVkTbMjlrMgvK3rsQdg"
     const hit = element.hitInfo;
     if (hit.$type == 'com.linkedin.voyager.search.Paywall') {
-      return null;
+      throw new Error(hit.type);
     }
 
     // trackingId = "1SIRPuYwRwye7TdI4wO1jg=="
@@ -367,14 +415,18 @@ async function findProfilesInCompany(company, name) {
     const invite = invites.find(invite => invite.toMemberId === element.hitInfo.id);
 
     const url = `https://www.linkedin.com/in/${model.publicIdentifier}/`;
-    return {
+
+
+    const profile = {
       ...model,
       id: hit.id,
       distance: hit.distance,
       invite,
       url,
       company,
-    }
+    };
+
+    return profile;
   }).filter(Boolean);
 
   return models;

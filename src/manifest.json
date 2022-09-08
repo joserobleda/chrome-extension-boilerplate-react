@@ -40,6 +40,8 @@
   ],
   "host_permissions": [
     "*://*.linkedin.com/*",
-    "https://retargetin.vercel.app/*"
+    "https://nurturein.vercel.app/*",
+    "http://fonts.googleapis.com/",
+    "https://fonts.googleapis.com/"
   ]
 }
