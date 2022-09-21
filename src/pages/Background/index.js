@@ -212,7 +212,21 @@ function off(text) {
 
 async function onFindLead(lead) {
   console.log(`Searching contacts`, lead);
-  if (lead.query) {
+
+  if (!lead.query) {
+    console.log(`Query is mandatory to search`);
+    chrome.runtime.sendMessage({
+      action: "profiles", payload: {
+        lead,
+        profiles: []
+      }
+    });
+
+    return;
+  }
+
+  // search by name only
+  if (!lead.company) {
     const profiles = await findProfiles(lead.query);
     console.log(`Find by query ${lead.query}`, profiles);
 
@@ -226,18 +240,10 @@ async function onFindLead(lead) {
     return;
   }
 
-  const email = lead.email;
-  const org = lead.org || /@(\w+)/gi.exec(email)[1];;
-  const domain = email.split('@')[1];
-  let name = lead.name || email.split('@')[0];
+  const company = await findOrg(lead.company);
 
-  if (name.indexOf(' ') !== -1) {
-    name = name.substring(0, name.indexOf(' '));
-  }
-
-  const company = await findOrg(org);
   if (!company) {
-    console.log(`Can't find org ${org}`);
+    console.log(`Can't find org ${lead.company}`);
     chrome.runtime.sendMessage({
       action: "profiles", payload: {
         lead,
@@ -249,7 +255,7 @@ async function onFindLead(lead) {
   }
 
   try {
-    const profiles = await findProfilesInCompany(company, name);
+    const profiles = await findProfilesInCompany(company, lead.query);
 
     chrome.runtime.sendMessage({
       action: "profiles", payload: {
@@ -266,7 +272,7 @@ async function onFindLead(lead) {
       }
     });
 
-    return onFindLead({ ...lead, query: `${name} ${org}` });
+    return onFindLead({ ...lead, company: null, query: `${lead.query} ${lead.company}` });
   }
 }
 
@@ -365,7 +371,7 @@ async function findProfiles(query) {
     const invite = invites.find(invite => invite.toMemberId === id);
 
     const current = (model.summary?.text || '').replace('Current: ', '');
-    const occupation = (current + ' ' + model.primarySubtitle.text).trim();
+    const occupation = (current + ' ' + model.primarySubtitle?.text).trim();
 
     return {
       ...model,

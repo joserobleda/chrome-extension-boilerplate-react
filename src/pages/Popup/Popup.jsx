@@ -1,7 +1,7 @@
 import React from 'react';
 // import { createClient } from '@supabase/supabase-js'
-import "./tailwind.css"
-import './Popup.css';
+// import "./tailwind.css"
+// import './Popup.css';
 import logo from '../../assets/img/logo.svg';
 import loading from '../../assets/img/loading.svg';
 import defaultProfilePic from '../../assets/img/default-profile-pic.png';
@@ -81,18 +81,20 @@ export default class Popup extends React.Component {
     this.setState({ leads });
   }
 
-  leadSelected(lead, i) {
-    console.log('lead selected', lead);
-    let leads = [...this.state.leads];
-    leads[i] = { ...lead, processing: true };
+  // leadSelected(lead, i) {
+  //   console.log('lead selected', lead);
+  //   let leads = [...this.state.leads];
+  //   leads[i] = { ...lead, processing: true };
 
-    this.setState({ leads });
-    chrome.runtime.sendMessage({ action: "findLead", payload: lead });
-  }
+  //   this.setState({ leads });
+  //   chrome.runtime.sendMessage({ action: "findLead", payload: lead });
+  // }
 
-  leadSearch(query, lead, i) {
-    console.log('lead search', lead);
+  leadSearch(query, company, lead, i) {
     lead.query = query;
+    lead.company = company;
+    console.log('lead search', lead);
+
     let leads = [...this.state.leads];
     leads[i] = { ...lead, processing: true };
 
@@ -154,7 +156,7 @@ export default class Popup extends React.Component {
         key={lead.id}
         lead={lead}
         onSelected={() => this.leadSelected(lead, i)}
-        onSearch={(q) => this.leadSearch(q, lead, i)}
+        onSearch={(query, company) => this.leadSearch(query, company, lead, i)}
         onDiscard={() => this.leadDiscarded(lead, i)}
       ></LeadCard>
     ));
@@ -166,7 +168,7 @@ export default class Popup extends React.Component {
             <div className="mr-auto ml-4 flex items-center py-3">
               <img className="mr-2 h-6 w-6" src={logo} alt="loading" />
               <span className="font-montserrat text-2xl font-extrabold text-black">
-                <span>Nurture</span><span className="text-orange">In</span>
+                <span>Nurture</span><span className="text-orange-500">In</span>
               </span>
             </div>
 
@@ -181,7 +183,7 @@ export default class Popup extends React.Component {
               {this.state.profileOpen &&
                 <div className="absolute right-0 z-10 w-56 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
                   <div className="py-1" role="none">
-                    <a href="#" class="text-gray-700 block px-4 py-2 text-sm">{this.state.user.email}</a>
+                    <a href="#" className="text-gray-700 block px-4 py-2 text-sm">{this.state.user.email}</a>
                     <a href="#" className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100" onClick={() => this.logOut()}>Sign out</a>
 
                     {/* <a href="#" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100" role="menuitem" tabindex="-1" id="menu-item-1">Support</a>
@@ -295,86 +297,92 @@ class LeadCard extends React.Component {
             <LeadAction
               lead={lead}
               onFind={() => this.props.onSelected()}
-              onSearch={(q) => this.props.onSearch(q)}
+              onSearch={(q, c) => this.props.onSearch(q, c)}
               onDiscard={() => this.props.onDiscard()}
             ></LeadAction>
           </div>
         </div>
-        {lead.profiles && lead.profiles.length > 0 &&
+        {lead.profiles &&
           <div>
-            <div className={`mt-2 pt-2`}>
-              {lead.profiles.map((profile, i) =>
-                <div key={profile.url} className={`grid gap-1 grid-cols-8 pt-2 ${i == 0 ? '' : 'mt-2'} border-t border-blue-100`}>
-                  <div className="col-span-1">
-                    {profile.picture &&
-                      <img src={profile.picture.rootUrl + profile.picture.artifacts[0].fileIdentifyingUrlPathSegment} width="90%" className="rounded-full ring ring-blue-400 mt-1" />
-                    }
-
-                    {!profile.picture &&
-                      <img src="https://static-exp1.licdn.com/sc/h/1c5u578iilxfi4m4dvc4q810q" width="90%" className="rounded-full ring ring-blue-400" />
-                    }
-                  </div>
-                  <div className="col-span-4">
-                    <div className="flex items-center">
-                      <a href={profile.url} className="text-lg mr-2 hover:underline hover:text-blue-600" target="_blank">{profile.firstName} {profile.lastName}</a>
-                    </div>
-
-                    <div>
-                      {profile.occupation} {profile.location ? ` · ${profile.location}` : ''}
-                    </div>
-                    <div className="mt-2">
-                      {!profile.invite &&
-                        <div className="inline">
-                          {profile.distance.value == 'DISTANCE_1' &&
-                            <div className="inline">
-                              <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Connected</button>
-                              {/* <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded mr-3" onClick={() => this.match(profile)}>Match</button> */}
-                            </div>
-                          }
-
-                          {profile.distance.value != 'DISTANCE_1' &&
-                            <div className="inline">
-                              {profile.connecting &&
-                                <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Connecting...</button>
-                              }
-                              {!profile.connecting &&
-                                <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded mr-3" onClick={() => this.connect(profile)}>Connect</button>
-                              }
-                            </div>
-                          }
-                        </div>
-                      }
-
-                      {profile.invite &&
-                        <div className="inline">
-                          <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Pending</button>
-                        </div>
-                      }
-
-                      <div className="inline">
-                        {!profile.matching &&
-                          <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded mr-3" onClick={() => this.match(profile)}>Match</button>
-                        }
-
-                        {profile.matching &&
-                          <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Matching...</button>
-                        }
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-span-3 flex items-start justify-end ">
-                    {profile.company &&
-                      <div className="flex items-center">
-                        <a className="mr-4 hover:underline hover:text-blue-600">{profile.company.title.text}</a>
-                        {profile.company.vectorImage &&
-                          <img src={profile.company.vectorImage.rootUrl + profile.company.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment} width="30px" height="30px" className="inline-block" />
-                        }
-                      </div>
-                    }
-                  </div>
-                </div>
-              )}
+            <div className="mt-2 pt-2">
+              <button className="bg-gray-300 text-gray-400 font-bold py-1 px-2 rounded">{this.props.lead.profiles.length} results</button>
             </div>
+
+            {lead.profiles.length > 0 &&
+              <div className={`mt-2 pt-2`}>
+                {lead.profiles.map((profile, i) =>
+                  <div key={profile.url} className={`grid gap-1 grid-cols-8 pt-2 ${i == 0 ? '' : 'mt-2'} border-t border-blue-100`}>
+                    <div className="col-span-1">
+                      {profile.picture &&
+                        <img src={profile.picture.rootUrl + profile.picture.artifacts[0].fileIdentifyingUrlPathSegment} width="90%" className="rounded-full ring ring-blue-400 mt-1" />
+                      }
+
+                      {!profile.picture &&
+                        <img src="https://static-exp1.licdn.com/sc/h/1c5u578iilxfi4m4dvc4q810q" width="90%" className="rounded-full ring ring-blue-400" />
+                      }
+                    </div>
+                    <div className="col-span-4">
+                      <div className="flex items-center">
+                        <a href={profile.url} className="text-lg mr-2 hover:underline hover:text-blue-600" target="_blank">{profile.firstName} {profile.lastName}</a>
+                      </div>
+
+                      <div>
+                        {profile.occupation} {profile.location ? ` · ${profile.location}` : ''}
+                      </div>
+                      <div className="mt-2">
+                        {!profile.invite &&
+                          <div className="inline">
+                            {profile.distance.value == 'DISTANCE_1' &&
+                              <div className="inline">
+                                <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Connected</button>
+                                {/* <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded mr-3" onClick={() => this.match(profile)}>Match</button> */}
+                              </div>
+                            }
+
+                            {profile.distance.value != 'DISTANCE_1' &&
+                              <div className="inline">
+                                {profile.connecting &&
+                                  <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Connecting...</button>
+                                }
+                                {!profile.connecting &&
+                                  <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded mr-3" onClick={() => this.connect(profile)}>Connect</button>
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
+
+                        {profile.invite &&
+                          <div className="inline">
+                            <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Pending</button>
+                          </div>
+                        }
+
+                        <div className="inline">
+                          {!profile.matching &&
+                            <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded mr-3" onClick={() => this.match(profile)}>Match</button>
+                          }
+
+                          {profile.matching &&
+                            <button className="bg-gray-300 text-gray-400 font-bold py-1 px-3 rounded mr-3">Matching...</button>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-span-3 flex items-start justify-end ">
+                      {profile.company &&
+                        <div className="flex items-center">
+                          <a className="mr-4 hover:underline hover:text-blue-600">{profile.company.title.text}</a>
+                          {profile.company.vectorImage &&
+                            <img src={profile.company.vectorImage.rootUrl + profile.company.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment} width="30px" height="30px" className="inline-block" />
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+                )}
+              </div>
+            }
           </div>
         }
       </div>
@@ -386,7 +394,8 @@ class LeadAction extends React.Component {
   constructor(props) {
     super(props);
 
-    const search = this.getDefaultSearchValue();
+    // const company = this.getDefaultCompanyValue();
+    const search = this.getDefaultSearchValue() + ' ' + this.getDefaultCompanyValue();
     this.state = { search };
   }
 
@@ -399,8 +408,21 @@ class LeadAction extends React.Component {
     return username;
   }
 
+  getDefaultCompanyValue() {
+    const company = this.props.lead.org || /@(\w+)/gi.exec(this.props.lead.email)[1];
+
+    const providers = ['gmail', 'hotmail', 'yahoo'];
+    if (providers.includes(company)) return '';
+
+    return company;
+  }
+
   handleSearchChange(event) {
     this.setState({ search: event.target.value });
+  }
+
+  handleCompanyChange(event) {
+    this.setState({ company: event.target.value });
   }
 
   render() {
@@ -410,18 +432,23 @@ class LeadAction extends React.Component {
 
     return (
       <div className="flex">
-        {this.props.lead.profiles &&
-          <div className="mr-1">
-            <button className="bg-gray-300 text-gray-400 font-bold py-1 px-2 rounded">{this.props.lead.profiles.length} results</button>
-          </div>
-        }
 
-        <form onSubmit={e => { e.preventDefault(); this.props.onSearch(this.state.search) }} className="flex items-center -mr-12">
-          <input type="text" className="force-rounded w-48" value={this.state.search} onChange={(e) => this.handleSearchChange(e)} />
-          <button type="submit" className="bg-blue-200 hover:bg-blue-300 text-white font-bold py-1 px-4 embeded-btn" >🔎</button>
+        <form onSubmit={e => { e.preventDefault(); this.props.onSearch(this.state.search, this.state.company) }} className="flex items-center">
+          {/* <div className="relative transform translate-x-1">
+            <input value={this.state.company} onChange={(e) => this.handleCompanyChange(e)} type="text" className="block rounded-t-lg px-2.5 pb-2.5 pt-5 w-15 text-sm" placeholder=" " />
+            <label className="absolute transform text-sm text-gray-500 -translate-y-4 scale-75 z-1 top-0 -left-1.5 text-orange-600">Company</label>
+          </div> */}
+
+          <div className="relative">
+            {/* <input type="text" className="force-rounded w-48" value={this.state.search}  /> */}
+            <input value={this.state.search} onChange={(e) => this.handleSearchChange(e)} type="text" className="block py-1 px-2 text-xs w-22 border-orange-300 border rounded-l-md" placeholder=" " />
+            {/* <label className="absolute transform text-sm text-gray-500 -translate-y-4 scale-75 z-1 top-0 -left-0.5 text-orange-600">Person</label> */}
+          </div>
+
+          <button type="submit" className="bg-orange-200 hover:bg-orange-300 rounded-r-md text-white font-bold py-1 px-4">🔎</button>
         </form>
 
-        <button className="bg-white hover:bg-blue-200 text-white font-bold py-1 px-4 rounded ml-2" onClick={() => this.props.onDiscard()}>🗑</button>
+        <button className="bg-gray-100 hover:bg-gray-300 text-white font-bold py-1 px-2 rounded ml-2" onClick={() => this.props.onDiscard()}>🗑</button>
       </div>
     );
   }
