@@ -18,6 +18,7 @@ export default class Popup extends React.Component {
     ready: false,
     leads: [],
     upsell: false,
+    subscription: undefined,
   };
 
   async componentDidMount() {
@@ -61,6 +62,9 @@ export default class Popup extends React.Component {
           break;
         case 'linkedInProfile':
           this.setState({ profile: request.payload });
+          break;
+        case 'subscription':
+          this.setState({ subscription: request.payload.subscription });
           break;
       }
 
@@ -119,6 +123,13 @@ export default class Popup extends React.Component {
     chrome.runtime.sendMessage({ action: "signinflow" });
   }
 
+  openWebSite(path = '/') {
+    const url = `${WEB}${path}`;
+    chrome.tabs.create({ url, active: true }, function (tab) {
+      // console.log(tab);
+    });
+  }
+
   logOut() {
     chrome.runtime.sendMessage({ action: "logout" });
   }
@@ -138,7 +149,7 @@ export default class Popup extends React.Component {
       );
     }
 
-    if (!this.state.user) {
+    if (this.state.user == undefined) {
       return (
         <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
           <header className="p-6 shadow-lg bg-white text-base font-bold">
@@ -172,6 +183,19 @@ export default class Popup extends React.Component {
               </span>
             </div>
 
+            <div className="ml-auto">
+              <a href="#" onClick={() => this.openWebSite()}>
+                {this.state.subscription ?
+                  <span className={`text-xs font-semibold inline-block py-1 px-2 capitalize rounded-full text-${this.state.subscription.status == 'active' ? 'green' : 'pink'}-600 bg-${this.state.subscription.status == 'active' ? 'green' : 'pink'}-200 last:mr-0 mr-1`}>
+                    {this.state.subscription.status}
+                  </span>
+                  :
+                  <span className="text-xs font-semibold inline-block py-1 px-2 rounded-full text-yellow-600 bg-yellow-200 capitalize last:mr-0 mr-1">
+                    Free
+                  </span>
+                }
+              </a>
+            </div>
             <div className="relative inline-block text-left mr-4 pl-10" onMouseEnter={() => this.setState({ profileOpen: true })} onMouseLeave={() => this.setState({ profileOpen: false })}>
               <a href="#" onClick={() => this.setState({ profileOpen: !this.state.profileOpen })}>
                 <img className="inline-block h-8 w-8 rounded-full ring-2 ring-gray-300 hover:ring-gray-500" src={this.state.profile ? this.state.profile.profilePicture.displayImageReference.vectorImage.rootUrl + this.state.profile.profilePicture.displayImageReference.vectorImage.artifacts[1].fileIdentifyingUrlPathSegment : defaultProfilePic} alt="" />
