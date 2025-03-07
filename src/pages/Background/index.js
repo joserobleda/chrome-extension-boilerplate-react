@@ -357,7 +357,11 @@ async function findOrg(orgName) {
 
 async function findProfiles(query) {
   const objects = await getLinkedInObjects(`https://www.linkedin.com/search/results/people/?keywords=${query}`);
-  const collection = objects.filter(o => o.data && o.data.$type == 'com.linkedin.restli.common.CollectionResponse' && o.included && o.included.length)[0];
+
+  // const collection = objects.filter(o => o.data && o.data.$type == 'com.linkedin.restli.common.CollectionResponse' && o.included && o.included.length)[0];
+  const collection = objects.filter(o => o.data && o.data.data && o.data.data.searchDashClustersByAll)[0];
+  console.log('collection', collection);
+
 
   if (!collection) {
     return [];
@@ -378,7 +382,7 @@ async function findProfiles(query) {
       firstName: model.title.text,
       occupation,
       location: model.secondarySubtitle?.text,
-      picture: model.image.attributes[0].detailDataUnion.nonEntityProfilePicture.vectorImage,
+      picture: model.image.attributes[0].detailData.nonEntityProfilePicture.vectorImage,
       id,
       distance: {
         value: model.entityCustomTrackingInfo.memberDistance,
