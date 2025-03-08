@@ -106,7 +106,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       const currentUser = client.auth.user();
       chrome.runtime.sendMessage({ action: "signin", payload: currentUser });
 
-      if (currentUser) fetchData(`open`);
+      if (currentUser) fetchData(`open`, request.status);
       break;
     case 'findLead':
       onFindLead(request.payload);
@@ -134,7 +134,7 @@ function chromeAlarm(action, name) {
   });
 }
 
-async function fetchData(src = '') {
+async function fetchData(src = '', status = 'queued') {
   if (client && !client.auth.user()) {
     console.log('trying to recover session on fetch data...')
     await client.auth._recoverAndRefresh();
@@ -152,15 +152,22 @@ async function fetchData(src = '') {
 
   await chromeAlarm("clear", "fetch");
 
+  // Obtener el conteo de leads pendientes para el badge
+  const { count } = await client
+    .from('leads')
+    .select('*', { count: 'exact', head: true })
+    .filter('status', 'eq', 'queued');
+
+  // Obtener los leads según el filtro seleccionado
   const { data, error } = await client
     .from('leads')
     .select()
-    .filter('status', 'eq', 'queued')
-    .order('created_at', { ascending: true })
+    .filter('status', 'eq', status)
+    .order('created_at', { ascending: true });
 
   if (error) {
     console.log(error);
-    return
+    return;
   }
 
   if (!data) {
@@ -169,16 +176,16 @@ async function fetchData(src = '') {
 
   console.log(`Found ${data.length} leads`);
 
-  const queued = data.filter(lead => lead.status == 'queued');
   const leads = data.map(lead => {
     const providers = ['gmail', 'hotmail', 'yahoo'];
     lead.isProviderAccount = providers.map(p => lead.email.indexOf('@' + p) !== -1).includes(true);
-
     return lead;
-  })
+  });
 
+  // Actualizar el badge siempre con el número de leads pendientes
   chrome.action.setBadgeBackgroundColor({ color: '#CC0000' });
-  chrome.action.setBadgeText({ text: `${queued.length || ''}` });
+  const badgeText = count > 99 ? '99+' : count ? count.toString() : '';
+  chrome.action.setBadgeText({ text: badgeText });
 
   chrome.runtime.sendMessage({ action: "leads", payload: leads, src });
 }

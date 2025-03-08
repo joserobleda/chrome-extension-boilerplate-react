@@ -20,11 +20,16 @@ export default class Popup extends React.Component {
     leads: [],
     upsell: false,
     subscription: undefined,
+    sortAscending: false,
+    showProcessed: false,
   };
 
   async componentDidMount() {
     if (!chrome.runtime?.id) return;
-    chrome.runtime.sendMessage({ action: "open" });
+    chrome.runtime.sendMessage({
+      action: "open",
+      status: 'queued'
+    });
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.log(`popup message "${request.action}"`)
@@ -135,6 +140,26 @@ export default class Popup extends React.Component {
     chrome.runtime.sendMessage({ action: "logout" });
   }
 
+  toggleSort = () => {
+    this.setState(prevState => ({
+      sortAscending: !prevState.sortAscending
+    }));
+  }
+
+  toggleProcessed = () => {
+    this.setState(prevState => ({
+      showProcessed: !prevState.showProcessed,
+      leads: [], // Limpiamos los leads al cambiar el filtro
+      ready: false
+    }), () => {
+      // Después de actualizar el estado, solicitamos los nuevos leads
+      chrome.runtime.sendMessage({
+        action: "open",
+        status: this.state.showProcessed ? 'match' : 'queued'
+      });
+    });
+  }
+
   render() {
     // Loaded but no user
     if (this.state.user == null) {
@@ -163,7 +188,20 @@ export default class Popup extends React.Component {
       );
     }
 
-    const leadList = this.state.leads.map((lead, i) => (
+    const sortedLeads = [...this.state.leads]
+      .filter(lead => {
+        if (this.state.showProcessed) {
+          return lead.status === 'match';
+        }
+        return lead.status === 'queued';
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.created_at);
+        const dateB = new Date(b.created_at);
+        return this.state.sortAscending ? dateA - dateB : dateB - dateA;
+      });
+
+    const leadList = sortedLeads.map((lead, i) => (
       <LeadCard
         key={lead.id}
         lead={lead}
@@ -234,11 +272,27 @@ export default class Popup extends React.Component {
 
         {this.state.ready === true && this.state.leads.length > 0 &&
           <section>
-            {this.state.upsell &&
-              <div className="bg-red-200 rounded m-3 p-4 text-red-800 font-bold">
-                You have reached LinkedIn's search limit. Results may not be accurate for a while.
+            <div className="flex justify-between items-center mx-3 mt-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={this.toggleSort}
+                  className="bg-orange-200 hover:bg-orange-300 text-white font-bold py-1 px-3 rounded flex items-center"
+                >
+                  {this.state.sortAscending ? "↑" : "↓"} Fecha
+                </button>
+                <button
+                  onClick={this.toggleProcessed}
+                  className={`${this.state.showProcessed ? 'bg-blue-500' : 'bg-gray-200'} hover:bg-blue-600 text-white font-bold py-1 px-3 rounded flex items-center`}
+                >
+                  {this.state.showProcessed ? "Procesados" : "Pendientes"}
+                </button>
               </div>
-            }
+              {this.state.upsell &&
+                <div className="bg-red-200 rounded p-4 text-red-800 font-bold">
+                  You have reached LinkedIn's search limit. Results may not be accurate for a while.
+                </div>
+              }
+            </div>
             {leadList}
           </section>
         }
@@ -309,10 +363,23 @@ class LeadCard extends React.Component {
     return (
       <div key={lead.id} className="Card bg-white m-3 p-3 rounded-md">
         <div className="grid grid-cols-6 gap-4 h-8">
-          <div className="col-span-3 flex items-center">
-            {lead.email}
-            <br />
-            {lead.name || ''} {lead.org ? '(' + lead.org + ')' : ''}
+          <div className="col-span-3 flex items-center flex-col">
+            <div className="w-full">
+              {lead.email}
+              <span className="text-xs text-gray-500 ml-2">
+                {new Date(lead.created_at).toLocaleDateString('es-ES', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                })} {new Date(lead.created_at).toLocaleTimeString('es-ES', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
+            </div>
+            <div className="w-full">
+              {lead.name || ''} {lead.org ? '(' + lead.org + ')' : ''}
+            </div>
           </div>
           <div className="col-span-3 flex justify-end items-center">
             {/* <form onSubmit={e => { e.preventDefault(); this.props.onSearch(this.state.search) }} className="text-center mr-2">
