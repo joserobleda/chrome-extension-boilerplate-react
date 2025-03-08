@@ -66,6 +66,7 @@ body {
 }
 
 #app-container {
+  overflow-y: scroll;
   width: 730px;
   height: 400px;
 }

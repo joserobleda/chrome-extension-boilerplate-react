@@ -22,13 +22,15 @@ export default class Popup extends React.Component {
     subscription: undefined,
     sortAscending: false,
     showProcessed: false,
+    loading: false
   };
 
   async componentDidMount() {
     if (!chrome.runtime?.id) return;
     chrome.runtime.sendMessage({
       action: "open",
-      status: 'queued'
+      status: 'queued',
+      ascending: false
     });
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -37,14 +39,12 @@ export default class Popup extends React.Component {
       switch (request.action) {
         case 'signin':
           const user = request.payload;
-
           this.setState({ user });
           break;
         case 'leads':
           if (request.src == 'initialize') break;
 
           console.log(`leads recieved from ${request.src}`)
-          // merge current state leads with new leads data
           let leads = request.payload.map(lead => {
             const prev = this.state.leads.find(cl => cl.id == lead.id) || {};
 
@@ -55,10 +55,7 @@ export default class Popup extends React.Component {
             };
           })
 
-          this.setState({ ready: true, leads });
-
-          // Select lead to auto-search for the first item
-          // this.leadSelected(leads[0], 0);
+          this.setState({ ready: true, leads, loading: false });
           break;
         case 'profiles':
           this.onProfiles(request)
@@ -142,20 +139,27 @@ export default class Popup extends React.Component {
 
   toggleSort = () => {
     this.setState(prevState => ({
-      sortAscending: !prevState.sortAscending
-    }));
+      sortAscending: !prevState.sortAscending,
+      loading: true
+    }), () => {
+      // Después de actualizar el estado, solicitamos los leads con el nuevo orden
+      chrome.runtime.sendMessage({
+        action: "open",
+        status: this.state.showProcessed ? 'match' : 'queued',
+        ascending: this.state.sortAscending
+      });
+    });
   }
 
   toggleProcessed = () => {
     this.setState(prevState => ({
       showProcessed: !prevState.showProcessed,
-      leads: [], // Limpiamos los leads al cambiar el filtro
-      ready: false
+      loading: true
     }), () => {
-      // Después de actualizar el estado, solicitamos los nuevos leads
       chrome.runtime.sendMessage({
         action: "open",
-        status: this.state.showProcessed ? 'match' : 'queued'
+        status: this.state.showProcessed ? 'match' : 'queued',
+        ascending: this.state.sortAscending
       });
     });
   }
@@ -164,7 +168,7 @@ export default class Popup extends React.Component {
     // Loaded but no user
     if (this.state.user == null) {
       return (
-        <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
+        <div className="flex flex-col min-h-full bg-blue-100 bg-opacity-10">
           <header className="p-6 shadow-lg bg-white text-base font-bold">
             <p>&nbsp;</p>
           </header>
@@ -177,7 +181,7 @@ export default class Popup extends React.Component {
 
     if (this.state.user == undefined) {
       return (
-        <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
+        <div className="flex flex-col min-h-full bg-blue-100 bg-opacity-10">
           <header className="p-6 shadow-lg bg-white text-base font-bold">
             <p>&nbsp;</p>
           </header>
@@ -212,7 +216,7 @@ export default class Popup extends React.Component {
     ));
 
     return (
-      <div className="flex flex-col	min-h-full bg-blue-100 bg-opacity-10">
+      <div className="flex flex-col min-h-full bg-blue-100 bg-opacity-10">
         <header className="shadow-lg bg-white">
           <div className="flex justify-between items-center">
             <div className="mr-auto ml-4 flex items-center py-3">
@@ -273,27 +277,54 @@ export default class Popup extends React.Component {
         {this.state.ready === true && this.state.leads.length > 0 &&
           <section>
             <div className="flex justify-between items-center mx-3 mt-3">
-              <div className="flex gap-2">
+              <button
+                onClick={this.toggleSort}
+                className="bg-orange-200 hover:bg-orange-300 text-white font-bold py-1 px-3 rounded flex items-center gap-2"
+                disabled={this.state.loading}
+              >
+                {this.state.loading ? (
+                  <img className="h-4 w-4 App-logo" src={loading} alt="loading" />
+                ) : (
+                  this.state.sortAscending ? "↑" : "↓"
+                )}
+                Fecha
+              </button>
+
+              <div className="flex rounded-lg bg-gray-100 p-0.5">
                 <button
-                  onClick={this.toggleSort}
-                  className="bg-orange-200 hover:bg-orange-300 text-white font-bold py-1 px-3 rounded flex items-center"
+                  onClick={this.toggleProcessed}
+                  disabled={this.state.loading}
+                  className={`px-4 py-1 rounded-md text-sm font-medium transition-colors ${!this.state.showProcessed ? 'bg-white text-gray-700 shadow' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  {this.state.sortAscending ? "↑" : "↓"} Fecha
+                  {this.state.loading && !this.state.showProcessed ? (
+                    <img className="h-4 w-4 App-logo inline mr-1" src={loading} alt="loading" />
+                  ) : null}
+                  Pendientes
                 </button>
                 <button
                   onClick={this.toggleProcessed}
-                  className={`${this.state.showProcessed ? 'bg-blue-500' : 'bg-gray-200'} hover:bg-blue-600 text-white font-bold py-1 px-3 rounded flex items-center`}
+                  disabled={this.state.loading}
+                  className={`px-4 py-1 rounded-md text-sm font-medium transition-colors ${this.state.showProcessed ? 'bg-white text-gray-700 shadow' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  {this.state.showProcessed ? "Procesados" : "Pendientes"}
+                  {this.state.loading && this.state.showProcessed ? (
+                    <img className="h-4 w-4 App-logo inline mr-1" src={loading} alt="loading" />
+                  ) : null}
+                  Procesados
                 </button>
               </div>
-              {this.state.upsell &&
-                <div className="bg-red-200 rounded p-4 text-red-800 font-bold">
-                  You have reached LinkedIn's search limit. Results may not be accurate for a while.
-                </div>
-              }
             </div>
-            {leadList}
+            {this.state.upsell &&
+              <div className="bg-red-200 rounded mx-3 mt-3 p-4 text-red-800 font-bold">
+                You have reached LinkedIn's search limit. Results may not be accurate for a while.
+              </div>
+            }
+            {this.state.loading ? (
+              <div className="flex justify-center items-center mt-8">
+                <img className="h-8 w-8 App-logo" src={loading} alt="loading" />
+              </div>
+            ) : (
+              leadList
+            )}
           </section>
         }
       </div>

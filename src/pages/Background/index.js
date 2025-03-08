@@ -106,7 +106,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       const currentUser = client.auth.user();
       chrome.runtime.sendMessage({ action: "signin", payload: currentUser });
 
-      if (currentUser) fetchData(`open`, request.status);
+      if (currentUser) fetchData(`open`, request.status, request.ascending);
       break;
     case 'findLead':
       onFindLead(request.payload);
@@ -134,7 +134,7 @@ function chromeAlarm(action, name) {
   });
 }
 
-async function fetchData(src = '', status = 'queued') {
+async function fetchData(src = '', status = 'queued', ascending = false) {
   if (client && !client.auth.user()) {
     console.log('trying to recover session on fetch data...')
     await client.auth._recoverAndRefresh();
@@ -163,7 +163,7 @@ async function fetchData(src = '', status = 'queued') {
     .from('leads')
     .select()
     .filter('status', 'eq', status)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: ascending });
 
   if (error) {
     console.log(error);
