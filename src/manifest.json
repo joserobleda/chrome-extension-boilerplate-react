@@ -41,6 +41,7 @@
   "host_permissions": [
     "*://*.linkedin.com/*",
     "https://nurturein.vercel.app/*",
+    "http://localhost:3000/*",
     "http://fonts.googleapis.com/",
     "https://fonts.googleapis.com/"
   ]

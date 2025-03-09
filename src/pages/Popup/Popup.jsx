@@ -22,15 +22,35 @@ export default class Popup extends React.Component {
     subscription: undefined,
     sortAscending: false,
     showProcessed: false,
-    loading: false
+    skipPersonalEmails: false,
+    defaultSorting: 'desc',
+    totalPendingCount: 0
   };
 
   async componentDidMount() {
     if (!chrome.runtime?.id) return;
-    chrome.runtime.sendMessage({
-      action: "open",
-      status: 'queued',
-      ascending: false
+
+    // Leer las configuraciones del usuario
+    const settings = await new Promise(resolve => {
+      chrome.storage.sync.get(['skip_personal_emails', 'default_sorting'], (result) => {
+        resolve({
+          skipPersonalEmails: result.skip_personal_emails || false,
+          defaultSorting: result.default_sorting || 'desc'
+        });
+      });
+    });
+
+    this.setState({
+      skipPersonalEmails: settings.skipPersonalEmails,
+      sortAscending: settings.defaultSorting === 'asc',
+    }, () => {
+      // Enviar la configuración de ordenamiento y filtro al solicitar los leads
+      chrome.runtime.sendMessage({
+        action: "open",
+        status: 'queued',
+        ascending: this.state.sortAscending,
+        skipPersonalEmails: this.state.skipPersonalEmails
+      });
     });
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -55,7 +75,12 @@ export default class Popup extends React.Component {
             };
           })
 
-          this.setState({ ready: true, leads, loading: false });
+          this.setState({
+            ready: true,
+            leads,
+            loading: false,
+            totalPendingCount: request.totalCount || 0
+          });
           break;
         case 'profiles':
           this.onProfiles(request)
@@ -84,6 +109,7 @@ export default class Popup extends React.Component {
 
       return { ...item, processing: false, profiles };
     });
+
 
     this.setState({ leads });
   }
@@ -194,6 +220,7 @@ export default class Popup extends React.Component {
 
     const sortedLeads = [...this.state.leads]
       .filter(lead => {
+        // Filtrar por estado
         if (this.state.showProcessed) {
           return lead.status === 'match';
         }
@@ -299,7 +326,7 @@ export default class Popup extends React.Component {
                   {this.state.loading && !this.state.showProcessed ? (
                     <img className="h-4 w-4 App-logo inline mr-1" src={loading} alt="loading" />
                   ) : null}
-                  Pendientes
+                  Pendientes {!this.state.showProcessed && this.state.totalPendingCount > 0 ? `(${this.state.totalPendingCount})` : ''}
                 </button>
                 <button
                   onClick={this.toggleProcessed}

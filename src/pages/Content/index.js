@@ -7,8 +7,8 @@ window.addEventListener("load", run, false);
 
 function run() {
   if (location.pathname != '/auth-extension') return;
-  if (!localStorage['supabase.auth.token']) return;
+  if (!localStorage['sb-127-auth-token']) return;
 
-  const token = JSON.parse(localStorage['supabase.auth.token']);
+  const token = JSON.parse(localStorage['sb-127-auth-token']);
   chrome.runtime.sendMessage({ action: "auth", payload: token });
 }

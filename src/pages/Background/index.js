@@ -27,12 +27,23 @@ async function initialize() {
     }
   });
 
-  if (!client.auth.user()) {
-    console.log('trying to recover session on initialize...')
-    await client.auth._recoverAndRefresh();
+  try {
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) {
+      console.log('trying to recover session on initialize...')
+      const { data: { session }, error } = await client.auth.getSession();
+
+      if (error) throw error;
+      if (session) {
+        await client.auth.setSession(session);
+      }
+    }
+  } catch (error) {
+    console.error('Error recovering session:', error);
+    return off('!');
   }
 
-  const session = client.auth.session();
+  const { data: { session } } = await client.auth.getSession();
   if (!session) return off('!');
 
   chrome.alarms.get('fetch', a => {
@@ -45,7 +56,7 @@ async function initialize() {
   fetchData(`initialize`);
 }
 
-async function fetchLinkedInProfileInfo(localStorage) {
+async function fetchLinkedInProfileInfo() {
   console.log('✅ FETCH LINKEDIN INFO');
 
   const objects = await getLinkedInObjects(`https://www.linkedin.com/`);
@@ -80,21 +91,29 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
     case 'auth':
       console.log('auth received');
       // already signed in
-      if (client.auth.user()) {
+      const { data: { user: existingUser } } = await client.auth.getUser();
+      if (existingUser) {
         return console.log('session already set');
       }
 
-      await ChromeLocalStorage.setToken(request.payload);
-      client.auth._recoverSession();
-      const auser = client.auth.user();
+      await client.auth.setSession(request.payload);
 
+      const { data: { session }, error } = await client.auth.getSession();
+
+      if (error) throw error;
+      if (session) {
+        await client.auth.setSession(session);
+      }
+
+      const { data: { user: auser } } = await client.auth.getUser();
       if (!auser) {
-        return console.log('invalid auth');
+        throw new Error('Invalid auth');
       }
 
       fetchData();
       console.log("user", auser);
       chrome.runtime.sendMessage({ action: "signin", payload: auser });
+
       break;
     case 'signinflow':
       const signInUrl = `${WEB}/signin?pwd=true&next=/auth-extension`;
@@ -103,10 +122,10 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       });
       break;
     case 'open':
-      const currentUser = client.auth.user();
-      chrome.runtime.sendMessage({ action: "signin", payload: currentUser });
+      const { data: { user: activeUser } } = await client.auth.getUser();
+      chrome.runtime.sendMessage({ action: "signin", payload: activeUser });
 
-      if (currentUser) fetchData(`open`, request.status, request.ascending);
+      if (activeUser) fetchData(`open`, request.status, request.ascending, request.skipPersonalEmails);
       break;
     case 'findLead':
       onFindLead(request.payload);
@@ -134,10 +153,16 @@ function chromeAlarm(action, name) {
   });
 }
 
-async function fetchData(src = '', status = 'queued', ascending = false) {
-  if (client && !client.auth.user()) {
-    console.log('trying to recover session on fetch data...')
-    await client.auth._recoverAndRefresh();
+async function fetchData(src = '', status = 'queued', ascending = false, skipPersonalEmails = false) {
+  if (client) {
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) {
+      console.log('trying to recover session on fetch data...')
+      const { data: { session } } = await client.auth.getSession();
+      if (session) {
+        await client.auth.setSession(session);
+      }
+    }
   }
 
   if (!client) {
@@ -145,7 +170,7 @@ async function fetchData(src = '', status = 'queued', ascending = false) {
     await initialize();
   }
 
-  const user = client.auth.user();
+  const { data: { user } } = await client.auth.getUser();
   if (!user) return console.log("session lost");
 
   console.log(`fetching data ${src}`, (new Date()).toISOString(), user.email);
@@ -158,12 +183,39 @@ async function fetchData(src = '', status = 'queued', ascending = false) {
     .select('*', { count: 'exact', head: true })
     .filter('status', 'eq', 'queued');
 
-  // Obtener los leads según el filtro seleccionado
-  const { data, error } = await client
+  // Construir la query base para el conteo total
+  let countQuery = client
+    .from('leads')
+    .select('*', { count: 'exact', head: true })
+    .filter('status', 'eq', 'queued');
+
+  // Aplicar el filtro de emails personales al conteo si está activado
+  if (skipPersonalEmails) {
+    const personalDomains = ['gmail.com', 'hotmail.com', 'yahoo.com', 'outlook.com', 'aol.com', 'icloud.com'];
+    countQuery = countQuery.not('email', 'ilike', `%@${personalDomains.join(',%@')}`);
+  }
+
+  // Obtener el conteo total
+  const { count: totalCount } = await countQuery;
+  console.log({ count })
+
+  // Construir la query base para los leads
+  let query = client
     .from('leads')
     .select()
-    .filter('status', 'eq', status)
-    .order('created_at', { ascending: ascending });
+    .filter('status', 'eq', status);
+
+  // Añadir filtro de emails personales si está activado
+  if (skipPersonalEmails) {
+    const personalDomains = ['gmail.com', 'hotmail.com', 'yahoo.com', 'outlook.com', 'aol.com', 'icloud.com'];
+    query = query.not('email', 'ilike', `%@${personalDomains.join(',%@')}`);
+  }
+
+  // Añadir ordenamiento
+  query = query.order('created_at', { ascending });
+
+  // Ejecutar la query
+  const { data, error } = await query;
 
   if (error) {
     console.log(error);
@@ -187,7 +239,12 @@ async function fetchData(src = '', status = 'queued', ascending = false) {
   const badgeText = count > 99 ? '99+' : count ? count.toString() : '';
   chrome.action.setBadgeText({ text: badgeText });
 
-  chrome.runtime.sendMessage({ action: "leads", payload: leads, src });
+  chrome.runtime.sendMessage({
+    action: "leads",
+    payload: leads,
+    totalCount,
+    src
+  });
 }
 
 chrome.alarms.onAlarm.addListener(alarm => {
@@ -222,13 +279,7 @@ async function onFindLead(lead) {
 
   if (!lead.query) {
     console.log(`Query is mandatory to search`);
-    chrome.runtime.sendMessage({
-      action: "profiles", payload: {
-        lead,
-        profiles: []
-      }
-    });
-
+    processProfiles(lead, []);
     return;
   }
 
@@ -237,13 +288,7 @@ async function onFindLead(lead) {
     const profiles = await findProfiles(lead.query);
     console.log(`Find by query ${lead.query}`, profiles);
 
-    chrome.runtime.sendMessage({
-      action: "profiles", payload: {
-        lead,
-        profiles
-      }
-    });
-
+    processProfiles(lead, profiles);
     return;
   }
 
@@ -251,25 +296,14 @@ async function onFindLead(lead) {
 
   if (!company) {
     console.log(`Can't find org ${lead.company}`);
-    chrome.runtime.sendMessage({
-      action: "profiles", payload: {
-        lead,
-        profiles: []
-      }
-    });
-
+    sendProfilesMessage(lead, []);
     return;
   }
 
   try {
     const profiles = await findProfilesInCompany(company, lead.query);
 
-    chrome.runtime.sendMessage({
-      action: "profiles", payload: {
-        lead,
-        profiles
-      }
-    });
+    processProfiles(lead, profiles);
 
   } catch (err) {
     console.log(`can't search by company, trying by query`);
@@ -281,6 +315,33 @@ async function onFindLead(lead) {
 
     return onFindLead({ ...lead, company: null, query: `${lead.query} ${lead.company}` });
   }
+}
+
+function processProfiles(lead, profiles) {
+  console.log(`Processing profiles`, profiles);
+
+  const getToken = async () => {
+    const { data: { user } } = await client.auth.getUser();
+    return user?.jwt_token;
+  };
+
+  getToken().then(token => {
+    fetch(`${WEB}/api/profile-scoring`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ profiles, lead })
+    });
+  });
+
+  chrome.runtime.sendMessage({
+    action: "profiles", payload: {
+      lead,
+      profiles
+    }
+  });
 }
 
 async function onDiscard(request) {
@@ -320,6 +381,9 @@ async function onConnect(request) {
 }
 
 async function sendConnectionRequest(profile) {
+  console.log('sending connection request', profile);
+
+  /*
   const url = `https://www.linkedin.com/voyager/api/growth/normInvitations?action=verifyQuotaAndCreate`;
   const payload = {
     invitation: {
@@ -331,6 +395,14 @@ async function sendConnectionRequest(profile) {
       },
       trackingId: profile.trackingId,
     }
+  };
+  */
+
+  const url = `https://www.linkedin.com/voyager/api/voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2&decorationId=com.linkedin.voyager.dash.deco.relationships.InvitationCreationResultWithInvitee-2`;
+
+  const memberProfile = `urn:li:fsd_profile:${profile.id}`;
+  const payload = {
+    invitee: { inviteeUnion: { memberProfile } }
   };
 
   console.log("post", payload);
@@ -367,7 +439,6 @@ async function findProfiles(query) {
 
   // const collection = objects.filter(o => o.data && o.data.$type == 'com.linkedin.restli.common.CollectionResponse' && o.included && o.included.length)[0];
   const collection = objects.filter(o => o.data && o.data.data && o.data.data.searchDashClustersByAll)[0];
-  console.log('collection', collection);
 
 
   if (!collection) {
